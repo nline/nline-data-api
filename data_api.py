@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
+import dask.dataframe as dd
 import pandas as pd
 import polars as pl
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+from google.cloud import storage
 from pyarrow.fs import GcsFileSystem
 from pyarrow.parquet import ParquetDataset
 
@@ -20,23 +22,38 @@ def parse_datetime(date_string):
     raise ValueError(f"Unable to parse date string: {date_string}")
 
 
-def get_raw_lazy(bucket_name, start_time, end_time):
+def get_raw_polars(bucket_name, start_time, end_time):
     source = f"{gcs_nline}/{bucket_name}/*.parquet"
 
     # Convert start_time and end_time to datetime objects
     start = parse_datetime(start_time)
     end = parse_datetime(end_time)
 
-    # Scan the Parquet files lazily
+    # Use Polars to read and filter the Parquet files
     df = pl.scan_parquet(source)
+    filtered_df = df.filter((pl.col("time") >= start) & (pl.col("time") < end))
 
-    # Apply time filter
-    df_filtered = df.filter((pl.col("time") >= start) & (pl.col("time") < end))
+    # Return the lazy DataFrame
+    return filtered_df
 
-    # Collect the filtered data
-    result = df_filtered.collect()
 
-    return result
+def get_raw_dask(bucket_name, start_time, end_time):
+    source = f"{gcs_nline}/{bucket_name}/*.parquet"
+
+    # Convert start_time and end_time to datetime objects
+    start = parse_datetime(start_time)
+    end = parse_datetime(end_time)
+
+    # Read the Parquet files into a Dask DataFrame
+    time_filter = [("time", ">=", start), ("time", "<", end)]
+
+    df = dd.read_parquet(source, filters=time_filter)
+    # df = dd.read_parquet(source)
+    # df = df[df['time'].between(start, end)]
+    # Compute the result (this will trigger the actual read and filter operations)
+    # result = df.compute()
+
+    return df
 
 
 def get_raw(bucket_name, start_time, end_time):
@@ -52,11 +69,52 @@ def get_raw(bucket_name, start_time, end_time):
     end = parse_datetime(end_time)
 
     dataset = ds.dataset(source, format="parquet")
-    filtered_dataset = dataset.filter((ds.field("time") >= start) & (ds.field("time") < end))
-    
+    filtered_dataset = dataset.filter(
+        (ds.field("time") >= start) & (ds.field("time") < end)
+    )
+
     df = pl.scan_pyarrow_dataset(filtered_dataset)
 
     return df
+
+
+def get_csv_files(start_datetime, end_datetime):
+    start = datetime.strptime(start_datetime, "%Y-%m-%d %H:%M")
+    end = datetime.strptime(end_datetime, "%Y-%m-%d %H:%M")
+    date_range = [
+        start.date() + timedelta(days=x)
+        for x in range((end.date() - start.date()).days + 1)
+    ]
+    return [
+        (
+            date,
+            f"gs://nline-public-data/ghana/gridwatch_data/{date.strftime('%Y-%m-%d')}.csv",
+        )
+        for date in date_range
+    ]
+
+
+def process_csv(file_path, date, start_datetime, end_datetime):
+    df = pl.read_csv(file_path)
+
+    if date == datetime.strptime(start_datetime, "%Y-%m-%d %H:%M").date():
+        df = df.filter(pl.col("time") >= start_datetime)
+    elif date == datetime.strptime(end_datetime, "%Y-%m-%d %H:%M").date():
+        df = df.filter(pl.col("time") < end_datetime)
+
+    return df
+
+
+def get_filtered_data(start_datetime, end_datetime):
+    csv_files = get_csv_files(start_datetime, end_datetime)
+
+    dataframes = []
+    for date, file in csv_files:
+        print("Loading", file)
+        df = process_csv(file, date, start_datetime, end_datetime)
+        dataframes.append(df)
+
+    return pl.concat(dataframes)
 
 
 def average_by_spatial_group(df, group_by, metrics=["voltage", "frequency"]):
