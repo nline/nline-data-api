@@ -114,7 +114,7 @@ def get_filtered_data(start_datetime, end_datetime):
         df = process_csv(file, date, start_datetime, end_datetime)
         dataframes.append(df)
 
-    return pl.concat(dataframes)
+    return pl.concat(dataframes, how="diagonal_relaxed")
 
 
 def average_by_spatial_group(df, group_by, metrics=["voltage", "frequency"]):
@@ -126,7 +126,7 @@ def average_by_spatial_group(df, group_by, metrics=["voltage", "frequency"]):
     :param metrics: list of str, metrics to average (default: ['voltage', 'frequency'])
     :return: Polars DataFrame with averages
     """
-    return df.groupby(group_by).agg(
+    return df.group_by(group_by).agg(
         [pl.col(metric).mean().alias(f"avg_{metric}") for metric in metrics]
     )
 
