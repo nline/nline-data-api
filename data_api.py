@@ -3,7 +3,12 @@ from typing import List, Optional, Tuple
 
 import polars as pl
 
+from key_manager import APIKeyManager
+
 GCS_BUCKET = "gs://nline-public-data"
+TOKEN_FILE = ".access_token"
+
+key_manager = APIKeyManager()
 
 
 def parse_datetime(date_string: str) -> datetime:
@@ -91,6 +96,9 @@ def get_filtered_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     Returns:
         A Polars DataFrame with merged and filtered data.
     """
+    if not key_manager.validate_or_retrieve_key():
+        raise ValueError("Access token not found. Please register to use this API.")
+
     start = parse_datetime(start_datetime)
     end = parse_datetime(end_datetime)
     csv_files = get_csv_files(start, end)
@@ -120,8 +128,7 @@ def time_series_average(
     """
     time_col = pl.col("time").cast(pl.Datetime).dt.truncate(time_interval)
     agg_exprs = [
-        pl.col(metric).drop_nulls().mean().alias(f"avg_{metric}")
-        for metric in metrics
+        pl.col(metric).drop_nulls().mean().alias(f"avg_{metric}") for metric in metrics
     ]
 
     if group_by:

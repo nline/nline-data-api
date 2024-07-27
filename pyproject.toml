@@ -1,20 +1,14 @@
 [project]
 name = "nline-data-api"
 version = "0.1.0"
-description = "Add your description here"
-authors = [
-    { name = "Jackson Goode", email = "jacksongoode@proton.me" }
-]
+description = "A lightweight utility to access the MCC public data collected by nLine Inc."
+authors = [{ name = "nLine", email = "nline@info.io" }]
 dependencies = [
-    "pandas>=2.2.2",
-    "polars>=1.1.0",
-    "gcsfs>=2024.6.1",
-    "ipykernel>=6.29.5",
-    "pyarrow>=17.0.0",
-    "google-cloud-storage>=2.17.0",
-    "dask>=2024.7.1",
-    "fastparquet>=2024.5.0",
-    "jupyterlab>=4.2.4",
+  "pandas>=2.2.2",
+  "polars>=1.1.0",
+  "ipykernel>=6.29.5",
+  "pyarrow>=17.0.0",
+  "requests>=2.32.3",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
