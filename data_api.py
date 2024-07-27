@@ -1,19 +1,25 @@
 from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
 
-import dask.dataframe as dd
-import pandas as pd
 import polars as pl
-import pyarrow.dataset as ds
-import pyarrow.parquet as pq
-from google.cloud import storage
-from pyarrow.fs import GcsFileSystem
-from pyarrow.parquet import ParquetDataset
 
-gcs_nline = "gs://nline-public-data"
+GCS_BUCKET = "gs://nline-public-data"
 
 
-def parse_datetime(date_string):
-    formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M"]
+def parse_datetime(date_string: str) -> datetime:
+    """
+    Parse a date string into a datetime object.
+
+    Args:
+        date_string: The date string to parse.
+
+    Returns:
+        A datetime object.
+
+    Raises:
+        ValueError: If the date string cannot be parsed.
+    """
+    formats = ["%Y-%m-%d %H:%M", "%Y-%m-%d"]
     for fmt in formats:
         try:
             return datetime.strptime(date_string, fmt)
@@ -22,147 +28,195 @@ def parse_datetime(date_string):
     raise ValueError(f"Unable to parse date string: {date_string}")
 
 
-def get_raw_polars(bucket_name, start_time, end_time):
-    source = f"{gcs_nline}/{bucket_name}/*.parquet"
+def get_csv_files(
+    start_datetime: datetime, end_datetime: datetime
+) -> List[Tuple[datetime.date, str]]:
+    """
+    Generate a list of CSV file paths for a given date range.
 
-    # Convert start_time and end_time to datetime objects
-    start = parse_datetime(start_time)
-    end = parse_datetime(end_time)
+    Args:
+        start_datetime: Start date and time as datetime object.
+        end_datetime: End date and time as datetime object.
 
-    # Use Polars to read and filter the Parquet files
-    df = pl.scan_parquet(source)
-    filtered_df = df.filter((pl.col("time") >= start) & (pl.col("time") < end))
-
-    # Return the lazy DataFrame
-    return filtered_df
-
-
-def get_raw_dask(bucket_name, start_time, end_time):
-    source = f"{gcs_nline}/{bucket_name}/*.parquet"
-
-    # Convert start_time and end_time to datetime objects
-    start = parse_datetime(start_time)
-    end = parse_datetime(end_time)
-
-    # Read the Parquet files into a Dask DataFrame
-    time_filter = [("time", ">=", start), ("time", "<", end)]
-
-    df = dd.read_parquet(source, filters=time_filter)
-    # df = dd.read_parquet(source)
-    # df = df[df['time'].between(start, end)]
-    # Compute the result (this will trigger the actual read and filter operations)
-    # result = df.compute()
-
-    return df
-
-
-def get_raw(bucket_name, start_time, end_time):
-    source = f"{gcs_nline}/{bucket_name}"
-    # source = f"{gcs_nline}/{bucket_name}/"
-    # source = source.replace("gs://", "")
-
-    # gcs = GcsFileSystem()
-    # dataset = ds.dataset(source, format="parquet", filesystem=gcs)
-
-    # Convert start_time and end_time to datetime objects
-    start = parse_datetime(start_time)
-    end = parse_datetime(end_time)
-
-    dataset = ds.dataset(source, format="parquet")
-    filtered_dataset = dataset.filter(
-        (ds.field("time") >= start) & (ds.field("time") < end)
-    )
-
-    df = pl.scan_pyarrow_dataset(filtered_dataset)
-
-    return df
-
-
-def get_csv_files(start_datetime, end_datetime):
-    start = datetime.strptime(start_datetime, "%Y-%m-%d %H:%M")
-    end = datetime.strptime(end_datetime, "%Y-%m-%d %H:%M")
+    Returns:
+        A list of tuples, each containing a date and corresponding CSV file path.
+    """
+    start_date = start_datetime.date()
+    end_date = end_datetime.date()
     date_range = [
-        start.date() + timedelta(days=x)
-        for x in range((end.date() - start.date()).days + 1)
+        start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)
     ]
     return [
-        (
-            date,
-            f"gs://nline-public-data/ghana/gridwatch_data/{date.strftime('%Y-%m-%d')}.csv",
-        )
+        (date, f"{GCS_BUCKET}/ghana/gridwatch_data/{date:%Y-%m-%d}.csv")
         for date in date_range
     ]
 
 
-def process_csv(file_path, date, start_datetime, end_datetime):
-    df = pl.read_csv(file_path)
+def process_csv(
+    file_path: str,
+    date: datetime.date,
+    start_datetime: datetime,
+    end_datetime: datetime,
+) -> pl.LazyFrame:
+    """
+    Process a CSV file and filter data based on the given date range.
 
-    if date == datetime.strptime(start_datetime, "%Y-%m-%d %H:%M").date():
-        df = df.filter(pl.col("time") >= start_datetime)
-    elif date == datetime.strptime(end_datetime, "%Y-%m-%d %H:%M").date():
-        df = df.filter(pl.col("time") < end_datetime)
+    Args:
+        file_path: Path to the CSV file.
+        date: The date of the CSV file.
+        start_datetime: Start date and time as datetime object.
+        end_datetime: End date and time as datetime object.
+
+    Returns:
+        A Polars LazyFrame with filtered data.
+    """
+    df = pl.scan_csv(file_path)
+
+    if date == start_datetime.date():
+        df = df.filter(pl.col("time") >= start_datetime.strftime("%Y-%m-%d %H:%M"))
+    elif date == end_datetime.date():
+        df = df.filter(pl.col("time") < end_datetime.strftime("%Y-%m-%d %H:%M"))
 
     return df
 
 
-def get_filtered_data(start_datetime, end_datetime):
-    csv_files = get_csv_files(start_datetime, end_datetime)
-
-    dataframes = []
-    for date, file in csv_files:
-        print("Loading", file)
-        df = process_csv(file, date, start_datetime, end_datetime)
-        dataframes.append(df)
-
-    return pl.concat(dataframes, how="diagonal_relaxed")
-
-
-def average_by_spatial_group(df, group_by, metrics=["voltage", "frequency"]):
+def get_filtered_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     """
-    Calculate average metrics for a given spatial grouping.
+    Retrieve and merge filtered data from multiple CSV files for a given date range.
 
-    :param df: Polars DataFrame
-    :param group_by: str, column to group by ('district', 'region', or 'site_id')
-    :param metrics: list of str, metrics to average (default: ['voltage', 'frequency'])
-    :return: Polars DataFrame with averages
+    Args:
+        start_datetime: Start date and time in format "%Y-%m-%d %H:%M".
+        end_datetime: End date and time in format "%Y-%m-%d %H:%M".
+
+    Returns:
+        A Polars DataFrame with merged and filtered data.
     """
-    return df.group_by(group_by).agg(
-        [pl.col(metric).mean().alias(f"avg_{metric}") for metric in metrics]
-    )
+    start = parse_datetime(start_datetime)
+    end = parse_datetime(end_datetime)
+    csv_files = get_csv_files(start, end)
+
+    dfs = [process_csv(file, date, start, end) for date, file in csv_files]
+
+    return pl.concat(dfs, how="vertical_relaxed").collect()
 
 
 def time_series_average(
-    df, group_by, time_interval="1h", metrics=["voltage", "frequency"]
-):
+    df: pl.DataFrame,
+    group_by: Optional[str] = None,
+    time_interval: str = "1h",
+    metrics: List[str] = ["voltage", "frequency"],
+) -> pl.DataFrame:
     """
-    Calculate average metrics over time for a given spatial grouping.
+    Calculate average metrics over time for a given spatial grouping or the entire dataset.
 
-    :param df: Polars DataFrame
-    :param group_by: str, column to group by ('district', 'region', or 'site_id')
-    :param time_interval: str, time interval for grouping (default: '1h')
-    :param metrics: list of str, metrics to average (default: ['voltage', 'frequency'])
-    :return: Polars DataFrame with time series averages
+    Args:
+        df: Polars DataFrame.
+        group_by: Column to group by ('district', 'region', or 'site_id'). If None, averages entire dataset.
+        time_interval: Time interval for grouping (default: '1h').
+        metrics: Metrics to average (default: ['voltage', 'frequency']).
+
+    Returns:
+        A Polars DataFrame with time series averages.
     """
-    return df.groupby([group_by, pl.col("time").dt.truncate(time_interval)]).agg(
-        [pl.col(metric).mean().alias(f"avg_{metric}") for metric in metrics]
-    )
-
-
-def spatial_group_summary(df, group_by, metrics=["voltage", "frequency"]):
-    """
-    Calculate summary statistics for a given spatial grouping.
-
-    :param df: Polars DataFrame
-    :param group_by: str, column to group by ('district', 'region', or 'site_id')
-    :param metrics: list of str, metrics to summarize (default: ['voltage', 'frequency'])
-    :return: Polars DataFrame with summary statistics
-    """
-    return df.groupby(group_by).agg(
-        [
-            pl.col(metric).mean().alias(f"avg_{metric}"),
-            pl.col(metric).min().alias(f"min_{metric}"),
-            pl.col(metric).max().alias(f"max_{metric}"),
-            pl.col(metric).std().alias(f"std_{metric}"),
-        ]
+    time_col = pl.col("time").cast(pl.Datetime).dt.truncate(time_interval)
+    agg_exprs = [
+        pl.col(metric).drop_nulls().mean().alias(f"avg_{metric}")
         for metric in metrics
+    ]
+
+    if group_by:
+        return df.group_by([group_by, time_col]).agg(agg_exprs)
+    else:
+        return df.group_by(time_col).agg(agg_exprs)
+
+
+def spatial_group_summary(
+    df: pl.DataFrame,
+    group_by: Optional[str] = None,
+    metrics: List[str] = ["voltage", "frequency"],
+) -> pl.DataFrame:
+    """
+    Calculate summary statistics for a given spatial grouping or the entire dataset.
+
+    Args:
+        df: Polars DataFrame.
+        group_by: Column to group by ('district', 'region', or 'site_id'). If None, summarizes entire dataset.
+        metrics: Metrics to summarize (default: ['voltage', 'frequency']).
+
+    Returns:
+        A Polars DataFrame with summary statistics.
+    """
+    agg_exprs = []
+    for metric in metrics:
+        agg_exprs.extend(
+            [
+                pl.col(metric).mean(ignore_nulls=True).alias(f"avg_{metric}"),
+                pl.col(metric).min(ignore_nulls=True).alias(f"min_{metric}"),
+                pl.col(metric).max(ignore_nulls=True).alias(f"max_{metric}"),
+                pl.col(metric).std(ignore_nulls=True).alias(f"std_{metric}"),
+            ]
+        )
+
+    if group_by:
+        return df.group_by(group_by).agg(agg_exprs)
+    else:
+        return df.select(agg_exprs)
+
+
+def percentile_analysis(
+    df: pl.DataFrame,
+    group_by: Optional[str] = None,
+    metrics: List[str] = ["voltage", "frequency"],
+    percentiles: List[float] = [0.25, 0.5, 0.75],
+) -> pl.DataFrame:
+    """
+    Calculate percentiles for given metrics, optionally grouped by a column.
+
+    Args:
+        df: Polars DataFrame.
+        group_by: Column to group by. If None, analyzes entire dataset.
+        metrics: Metrics to analyze (default: ['voltage', 'frequency']).
+        percentiles: List of percentiles to calculate (default: [0.25, 0.5, 0.75]).
+
+    Returns:
+        A Polars DataFrame with percentile statistics.
+    """
+    agg_exprs = [
+        pl.col(metric).quantile(p).alias(f"{metric}_p{int(p*100)}")
+        for metric in metrics
+        for p in percentiles
+    ]
+
+    if group_by:
+        return df.group_by(group_by).agg(agg_exprs)
+    else:
+        return df.select(agg_exprs)
+
+
+def rolling_window_stats(
+    df: pl.DataFrame,
+    window_size: str = "24h",
+    metrics: List[str] = ["voltage", "frequency"],
+) -> pl.DataFrame:
+    """
+    Calculate rolling window statistics for the entire dataset.
+
+    Args:
+        df: Polars DataFrame.
+        window_size: Size of the rolling window (default: "24h").
+        metrics: Metrics to analyze (default: ['voltage', 'frequency']).
+
+    Returns:
+        A Polars DataFrame with rolling window statistics.
+    """
+    return df.sort("time").select(
+        "time",
+        *[
+            pl.col(metric).rolling_mean(window_size).alias(f"{metric}_rolling_mean")
+            for metric in metrics
+        ],
+        *[
+            pl.col(metric).rolling_std(window_size).alias(f"{metric}_rolling_std")
+            for metric in metrics
+        ],
     )
