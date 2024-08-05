@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 import polars as pl
+import pyarrow.dataset as ds
 
 from key_manager import APIKeyManager
 
@@ -85,7 +86,7 @@ def process_csv(
     return df
 
 
-def get_filtered_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
+def fetch_data_by_csv(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     """
     Retrieve and merge filtered data from multiple CSV files for a given date range.
 
@@ -106,6 +107,42 @@ def get_filtered_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     dfs = [process_csv(file, date, start, end) for date, file in csv_files]
 
     return pl.concat(dfs, how="vertical_relaxed").collect()
+
+
+def fetch_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
+    """Get data by using a PyArrow predicate filter on our partitioned dataset.
+
+    We wrote the data like:
+    ```
+    df = core()
+    df = df.withColumn("day", F.date_trunc("day", F.col("time")))
+    df.write.mode("overwrite").parquet(partitionBy="day", path=path)
+    ```
+
+    Data set looks like:
+    - nline-public-data/ghana/gridwatch_data/2023_partBy/day=2023-01-02 00%3A00%3A00/*.snappy.parquet
+    """
+    start = parse_datetime(start_datetime)
+    end = parse_datetime(end_datetime)
+
+    source = f"{GCS_BUCKET}/ghana/gridwatch_data/2023_partBy/"
+
+    dataset = ds.dataset(source)
+
+    # Convert start and end to strings in the format matching the partitioning
+    start_day = start.strftime("%Y-%m-%d 00:00:00")
+    end_day = end.strftime("%Y-%m-%d 00:00:00")
+
+    filtered_dataset = dataset.filter(
+        (ds.field("day") >= start_day) & (ds.field("day") < end_day)
+    )
+
+    df = pl.scan_pyarrow_dataset(filtered_dataset)
+
+    # Additional filter on the time column for more precise filtering within day
+    result = df.filter((pl.col("time") >= start) & (pl.col("time") < end)).collect()
+
+    return result
 
 
 def time_series_average(
