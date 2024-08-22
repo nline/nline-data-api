@@ -4,12 +4,13 @@ version = "0.1.0"
 description = "A lightweight utility to access the MCC public data collected by nLine Inc."
 authors = [{ name = "nLine", email = "nline@info.io" }]
 dependencies = ["pandas", "polars", "ipykernel", "pyarrow", "requests"]
+
 readme = "README.md"
+requires-python = ">=3.12"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-requires-python = ">=3.12"
 
 [tool.uv]
 managed = true

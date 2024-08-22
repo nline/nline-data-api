@@ -30,7 +30,7 @@ uv sync
 
 ## Usage
 
-First, import the necessary functions:
+First, import the any necessary functions:
 
 ```py
 from nline_data_api import fetch_data, time_series_average, spatial_group_summary, percentile_analysis, rolling_window_stats
@@ -42,9 +42,11 @@ To retrieve data for a specific time range:
 
 ```py
 start_time = "2023-01-01 00:00"
-end_time = "2023-01-02 00:00"
+end_time = "2023-01-07 00:00"
 df = fetch_data(start_time, end_time)
 ```
+
+Note: Due to the density of data, sensor data for a single day may range from 25-50mb compressed. You may want to filter by specific sites or districts.
 
 ### Data Analysis
 
@@ -75,6 +77,8 @@ rolling_stats_df = rolling_window_stats(df, window_size="24h")
 ## API Key
 
 On first use, you'll be prompted to enter your details to receive an API key. This key will be saved locally for future use.
+
+You can optionally add the API key you recieved from [nline.io](https://nline.io/public-data) in a `.access_token` file in the root directory.
 
 ## Data Description
 

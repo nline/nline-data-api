@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 import polars as pl
 import pyarrow.dataset as ds
 
-from key_manager import APIKeyManager
+from .key_manager import APIKeyManager
 
 GCS_BUCKET = "gs://nline-public-data"
 TOKEN_FILE = ".access_token"
@@ -120,12 +120,15 @@ def fetch_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     ```
 
     Data set looks like:
-    - nline-public-data/ghana/gridwatch_data/2023_partBy/day=2023-01-02 00%3A00%3A00/*.snappy.parquet
+    - nline-public-data/ghana/gridwatch_data/parquetday=2023-01-02 00%3A00%3A00/*.snappy.parquet
     """
+    if not key_manager.validate_or_retrieve_key():
+        raise ValueError("Access token not found. Please register to use this API.")
+
     start = parse_datetime(start_datetime)
     end = parse_datetime(end_datetime)
 
-    source = f"{GCS_BUCKET}/ghana/gridwatch_data/2023_partBy/"
+    source = f"{GCS_BUCKET}/ghana/gridwatch_data/parquet"
 
     dataset = ds.dataset(source)
 
