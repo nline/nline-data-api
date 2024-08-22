@@ -3,21 +3,15 @@ name = "nline-data-api"
 version = "0.1.0"
 description = "A lightweight utility to access the MCC public data collected by nLine Inc."
 authors = [{ name = "nLine", email = "nline@info.io" }]
-dependencies = [
-  "pandas>=2.2.2",
-  "polars>=1.1.0",
-  "ipykernel>=6.29.5",
-  "pyarrow>=17.0.0",
-  "requests>=2.32.3",
-]
+dependencies = ["pandas", "polars", "ipykernel", "pyarrow", "requests"]
 readme = "README.md"
-requires-python = ">= 3.8"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+requires-python = ">=3.12"
 
-[tool.rye]
+[tool.uv]
 managed = true
 dev-dependencies = []
 
