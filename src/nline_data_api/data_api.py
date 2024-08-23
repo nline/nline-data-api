@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 import polars as pl
+import pyarrow as pa
 import pyarrow.dataset as ds
 
 from .key_manager import APIKeyManager
@@ -125,25 +126,31 @@ def fetch_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     if not key_manager.validate_or_retrieve_key():
         raise ValueError("Access token not found. Please register to use this API.")
 
-    start = parse_datetime(start_datetime)
-    end = parse_datetime(end_datetime)
+    # Convert to datetime
+    start, end = map(parse_datetime, (start_datetime, end_datetime))
 
     source = f"{GCS_BUCKET}/ghana/gridwatch_data/parquet"
 
-    dataset = ds.dataset(source)
+    partitioning = ds.partitioning(
+        pa.schema([("day", pa.timestamp("s"))]), flavor="hive"
+    )
+    dataset = ds.dataset(source, partitioning=partitioning)
 
-    # Convert start and end to strings in the format matching the partitioning
-    start_day = start.strftime("%Y-%m-%d 00:00:00")
-    end_day = end.strftime("%Y-%m-%d 00:00:00")
+    start_day, end_day = (
+        pa.scalar(d.replace(hour=0, minute=0, second=0)) for d in (start, end)
+    )
 
+    # Case to proper format - speeds up filtering a bit
     filtered_dataset = dataset.filter(
         (ds.field("day") >= start_day) & (ds.field("day") < end_day)
     )
 
-    df = pl.scan_pyarrow_dataset(filtered_dataset)
-
     # Additional filter on the time column for more precise filtering within day
-    result = df.filter((pl.col("time") >= start) & (pl.col("time") < end)).collect()
+    result = (
+        pl.scan_pyarrow_dataset(filtered_dataset)
+        .filter((pl.col("time") >= start) & (pl.col("time") < end))
+        .collect()
+    )
 
     return result
 
