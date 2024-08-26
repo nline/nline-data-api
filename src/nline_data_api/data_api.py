@@ -54,7 +54,7 @@ def get_csv_files(
         start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)
     ]
     return [
-        (date, f"{GCS_BUCKET}/ghana/gridwatch_data/{date:%Y-%m-%d}.csv")
+        (date, f"{GCS_BUCKET}/ghana/gridwatch_data/csv/{date:%Y-%m-%d}.csv")
         for date in date_range
     ]
 

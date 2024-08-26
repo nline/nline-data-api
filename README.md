@@ -4,7 +4,7 @@ A lightweight utility to access the MCC public data collected by nLine Inc.
 
 ## Description
 
-nline-data-api provides easy access to gridwatch data collected in Ghana. This library offers functions to fetch, process, and analyze time-series data related to voltage and frequency measurements across various sites, districts, and regions.
+nline-data-api provides easy access to GridWatch data collected in Ghana. This library offers functions to fetch, process, and analyze time-series data of voltage and frequency measurements across various sites, districts, and regions.
 
 ## Installation
 
@@ -46,7 +46,7 @@ end_time = "2023-01-07 00:00"
 df = fetch_data(start_time, end_time)
 ```
 
-Note: Due to the density of data, sensor data for a single day may range from 25-50mb compressed. You may want to filter by specific sites or districts.
+**Note:** Due to the density of data, sensor data for a single day may range from 25-50mb compressed. For example, downloading a month of data might be around 1.25gb and at 25mb/s it would take roughly 1min 10s. You may want to filter by specific sites or districts.
 
 ### Data Analysis
 
