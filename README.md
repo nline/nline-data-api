@@ -1,10 +1,10 @@
 # nline-data-api
 
-A lightweight utility to access the MCC public data collected by nLine Inc.
+A lightweight utility to access the  GridWatch Accra Dataset collected by nLine Inc. over the course of July 2018 - July 2024.
 
 ## Description
 
-nline-data-api provides easy access to GridWatch data collected in Ghana. This library offers functions to fetch, process, and analyze time-series data of voltage and frequency measurements across various sites, districts, and regions.
+nline-data-api provides easy access to GridWatch data collected in Ghana. This library offers functions to fetch, process, and analyze time-series data of voltage and frequency measurements across various sites, districts, and regions. Learn more about the data [here](https://nline.io/public-data).
 
 ## Installation
 
