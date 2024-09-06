@@ -24,7 +24,6 @@ $ pip install uv
 To then install the project:
 
 ```sh
-uv venv
 uv sync
 ```
 

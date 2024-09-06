@@ -4,10 +4,11 @@ from typing import List, Optional, Tuple
 import polars as pl
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pyarrow.fs as fs
 
 from .key_manager import APIKeyManager
 
-GCS_BUCKET = "gs://nline-public-data"
+GCS_BUCKET = "nline-public-data"
 TOKEN_FILE = ".access_token"
 
 key_manager = APIKeyManager()
@@ -54,7 +55,7 @@ def get_csv_files(
         start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)
     ]
     return [
-        (date, f"{GCS_BUCKET}/ghana/gridwatch_data/csv/{date:%Y-%m-%d}.csv")
+        (date, f"gs://{GCS_BUCKET}/ghana/gridwatch_data/csv/{date:%Y-%m-%d}.csv")
         for date in date_range
     ]
 
@@ -134,7 +135,8 @@ def fetch_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     partitioning = ds.partitioning(
         pa.schema([("day", pa.timestamp("s"))]), flavor="hive"
     )
-    dataset = ds.dataset(source, partitioning=partitioning)
+    gcs_fs = fs.GcsFileSystem(anonymous=True)
+    dataset = ds.dataset(source, filesystem=gcs_fs, partitioning=partitioning)
 
     start_day, end_day = (
         pa.scalar(d.replace(hour=0, minute=0, second=0)) for d in (start, end)
