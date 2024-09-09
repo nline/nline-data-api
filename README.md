@@ -1,6 +1,6 @@
 # nline-data-api
 
-A lightweight utility to access the  GridWatch Accra Dataset collected by nLine Inc. over the course of July 2018 - July 2024.
+A lightweight utility to access the GridWatch Accra Dataset collected by nLine Inc. over the course of July 2018 - July 2024.
 
 ## Description
 
@@ -24,12 +24,20 @@ $ pip install uv
 To then install the project:
 
 ```sh
+git clone https://github.com/nline/nline-data-api
+cd nline-data-api
 uv sync
+```
+
+The interpreter and packages are stored in `.venv`. To activate the shell manually, you can run:
+
+```sh
+source .venv/bin/activate
 ```
 
 ## Usage
 
-First, import the any necessary functions:
+Within your Python script or notebook, import the necessary functions:
 
 ```py
 from nline_data_api import fetch_data, time_series_average, spatial_group_summary, percentile_analysis, rolling_window_stats
@@ -73,11 +81,33 @@ percentiles_df = percentile_analysis(df, group_by="site_id")
 rolling_stats_df = rolling_window_stats(df, window_size="24h")
 ```
 
+### Sample Analysis Script
+
+```py
+import sys
+import os
+
+from nline_data_api import fetch_data, time_series_average, spatial_group_summary, percentile_analysis, rolling_window_stats # type: ignore
+
+# Retrieve data for a specific time range
+start_time = "2023-01-01 00:00"
+end_time = "2023-01-07 00:00"
+df = fetch_data(start_time, end_time)
+
+# Calculate time series averages
+avg_df = time_series_average(df, group_by="district", time_interval="1h")
+avg_df.show()
+
+# Get spatial summaries
+percentiles_df = percentile_analysis(df, group_by="site_id")
+percentiles_df.show()
+```
+
 ## API Key
 
-On first use, you'll be prompted to enter your details to receive an API key. This key will be saved locally for future use.
+On first run of `fetch_data()`, you'll be prompted to enter your details to receive an API key. This key will be saved locally for future use.
 
-You can optionally add the API key you recieved from [nline.io](https://nline.io/public-data) in a `.access_token` file in the root directory.
+You can optionally add the API key you received from [nline.io](https://nline.io/public-data) in a `.access_token` file in the root directory.
 
 ## Data Description
 
@@ -96,4 +126,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Contact
 
-For any queries, please contact info@nline.io.
+For any queries, please contact [info@nline.io](mailto:info@nline.io).
