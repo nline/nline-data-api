@@ -96,11 +96,11 @@ df = fetch_data(start_time, end_time)
 
 # Calculate time series averages
 avg_df = time_series_average(df, group_by="district", time_interval="1h")
-avg_df.show()
+avg_df
 
 # Get spatial summaries
 percentiles_df = percentile_analysis(df, group_by="site_id")
-percentiles_df.show()
+percentiles_df
 ```
 
 ## API Key
