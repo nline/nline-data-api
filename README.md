@@ -53,6 +53,51 @@ end_time = "2023-01-07 00:00"
 df = fetch_data(start_time, end_time)
 ```
 
+#### Using Filters
+
+The `fetch_data` function supports flexible filtering through a dictionary parameter:
+
+```py
+# Filter by a single district
+df = fetch_data(start_time, end_time,
+    filters={"district": "Mampong"}
+)
+
+# Filter by voltage range
+df = fetch_data(start_time, end_time,
+    filters={"voltage": {"op": ">=", "value": 220}}
+)
+
+# Multiple filters: specific sites with voltage conditions
+df = fetch_data(start_time, end_time,
+    filters={
+        "site_id": [1, 2, 3],  # List of specific sites
+        "voltage": {"op": ">=", "value": 220},
+        "is_powered": True
+    }
+)
+
+# Complex filtering example
+df = fetch_data(start_time, end_time,
+    filters={
+        "district": "Mampong",  # Exact match
+        "voltage": {"op": ">=", "value": 220},  # Greater than or equal
+        "frequency": {"op": "<", "value": 51},  # Less than
+        "site_id": [1, 2, 3],  # Multiple values
+        "is_powered": True  # Boolean condition
+    }
+)
+```
+
+Supported comparison operators (`op`):
+
+- `>`: Greater than
+- `>=`: Greater than or equal
+- `<`: Less than
+- `<=`: Less than or equal
+- `==`: Equal to
+- `!=`: Not equal to
+
 **Note:** Due to the density of data, sensor data for a single day may range from 25-50mb compressed. For example, downloading a month of data might be around 1.25gb and at 25mb/s it would take roughly 1min 10s. You may want to filter by specific sites or districts.
 
 ### Data Analysis

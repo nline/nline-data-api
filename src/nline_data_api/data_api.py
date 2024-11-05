@@ -111,18 +111,27 @@ def fetch_data_by_csv(start_datetime: str, end_datetime: str) -> pl.DataFrame:
     return pl.concat(dfs, how="vertical_relaxed").collect()
 
 
-def fetch_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
+def fetch_data(
+    start_datetime: str, end_datetime: str, filters: Optional[dict] = None
+) -> pl.DataFrame:
     """Get data by using a PyArrow predicate filter on our partitioned dataset.
 
-    We wrote the data like:
-    ```
-    df = core()
-    df = df.withColumn("day", F.date_trunc("day", F.col("time")))
-    df.write.mode("overwrite").parquet(partitionBy="day", path=path)
-    ```
+    Args:
+        start_datetime: Start date and time in format "%Y-%m-%d %H:%M".
+        end_datetime: End date and time in format "%Y-%m-%d %H:%M".
+        filters: Dictionary of filters to apply. Format:
+            {
+                "column": value,  # For exact matches
+                "column": {"op": "<|>|<=|>=|==|!=", "value": value}  # For comparisons
+            }
+            Example: {
+                "district": "Mampong",  # Exact match
+                "voltage": {"op": ">=", "value": 220},  # Comparison
+                "site_id": [1, 2, 3]  # List for multiple values
+            }
 
-    Data set looks like:
-    - nline-public-data/ghana/gridwatch_data/parquetday=2023-01-02 00%3A00%3A00/*.snappy.parquet
+    Returns:
+        Filtered Polars DataFrame
     """
     if not key_manager.validate_or_retrieve_key():
         raise ValueError("Access token not found. Please register to use this API.")
@@ -147,12 +156,38 @@ def fetch_data(start_datetime: str, end_datetime: str) -> pl.DataFrame:
         (ds.field("day") >= start_day) & (ds.field("day") < end_day)
     )
 
-    # Additional filter on the time column for more precise filtering within day
-    result = (
-        pl.scan_pyarrow_dataset(filtered_dataset)
-        .filter((pl.col("time") >= start) & (pl.col("time") < end))
-        .collect()
-    )
+    # Start with time-based filter
+    query = (pl.col("time") >= start) & (pl.col("time") < end)
+
+    # Add user-specified filters
+    if filters:
+        for column, condition in filters.items():
+            if isinstance(condition, dict):
+                # Handle comparison operators
+                op = condition["op"]
+                value = condition["value"]
+                if op == ">":
+                    query &= pl.col(column) > value
+                elif op == ">=":
+                    query &= pl.col(column) >= value
+                elif op == "<":
+                    query &= pl.col(column) < value
+                elif op == "<=":
+                    query &= pl.col(column) <= value
+                elif op == "==":
+                    query &= pl.col(column) == value
+                elif op == "!=":
+                    query &= pl.col(column) != value
+                else:
+                    raise ValueError(f"Unsupported operator: {op}")
+            elif isinstance(condition, (list, tuple)):
+                # Handle list of values (IN clause)
+                query &= pl.col(column).is_in(condition)
+            else:
+                # Handle exact match
+                query &= pl.col(column) == condition
+
+    result = pl.scan_pyarrow_dataset(filtered_dataset).filter(query).collect()
 
     return result
 
